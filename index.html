@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phishing URL Scanner // darkOes</title>
+<meta name="description" content="Heuristic phishing link analyzer: lookalike domains, homoglyphs, suspicious TLDs and more. Runs fully in your browser.">
+<meta name="theme-color" content="#05080c">
+<style>
+  :root{--bg:#05080c;--panel:#0b1118;--line:#1d2a36;--fg:#c9d1d9;--w:#e6edf3;--y:#FCEE0A;--c:#00F0FF;--r:#FF2A6D;--g:#39FF14;--o:#ff9f1c;--m:#6b7a86}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.55 'JetBrains Mono','Fira Code',Consolas,'Courier New',monospace}
+  body{min-height:100vh;background:radial-gradient(ellipse at 80% 0%,rgba(255,42,109,.08),transparent 60%),var(--bg)}
+  body::after{content:"";position:fixed;inset:0;pointer-events:none;background:repeating-linear-gradient(0deg,rgba(0,0,0,.25) 0 1px,transparent 1px 3px);z-index:50}
+  a{color:var(--c)}
+  header{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 20px;border-bottom:1px solid var(--line);font-size:12px}
+  header a{text-decoration:none} header .brand{color:var(--y);letter-spacing:2px}
+  main{max-width:960px;margin:0 auto;padding:24px 16px 48px}
+  h1{margin:0;color:var(--r);font-size:clamp(22px,5vw,40px);letter-spacing:2px;text-shadow:0 0 14px rgba(255,42,109,.45)}
+  .sub{color:var(--y);letter-spacing:3px;font-size:12px;margin:4px 0 20px}
+  .note{border:1px solid rgba(57,255,20,.35);color:var(--g);padding:8px 12px;font-size:12px;margin-bottom:18px}
+  form{display:flex;gap:8px}
+  @media (max-width:640px){form{flex-direction:column}}
+  input{flex:1;min-width:0;font:inherit;font-size:16px;background:#03060a;color:var(--w);border:1px solid var(--r);padding:12px 14px;outline:none;caret-color:var(--y)}
+  input:focus{box-shadow:0 0 0 1px var(--r),0 0 18px rgba(255,42,109,.25)}
+  button{font:inherit;background:transparent;color:var(--y);border:1px solid var(--y);padding:8px 16px;cursor:pointer;letter-spacing:1px}
+  button:hover{background:var(--y);color:#000}
+  .examples{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0 22px;font-size:12px;align-items:center}
+  .examples span{color:var(--m)}
+  .examples button{font-size:12px;padding:3px 8px;border-color:#2b3946;color:var(--fg)}
+  .examples button:hover{border-color:var(--y);color:#000}
+  #result{display:none}
+  #result.on{display:block}
+  .verdict{display:grid;grid-template-columns:auto 1fr;gap:20px;align-items:center;border:1px solid var(--line);background:var(--panel);padding:18px}
+  @media (max-width:640px){.verdict{grid-template-columns:1fr;text-align:center}}
+  .gauge{width:130px;height:130px;margin:auto;position:relative}
+  .gauge svg{width:100%;height:100%;transform:rotate(-90deg)}
+  .gauge b{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:32px}
+  .verdict h2{margin:0;font-size:clamp(20px,4vw,28px);letter-spacing:3px}
+  .verdict p{margin:6px 0 0;font-size:13px}
+  .anatomy{margin:16px 0;border:1px solid var(--line);background:#03060a;padding:12px;word-break:break-all;font-size:14px}
+  .anatomy .lbl{display:block;color:var(--m);font-size:11px;letter-spacing:2px;margin-bottom:6px}
+  .p-scheme{color:var(--m)} .p-sub{color:var(--fg)} .p-reg{color:var(--y);font-weight:700;text-decoration:underline;text-underline-offset:4px} .p-path{color:var(--m)}
+  .p-bad{color:var(--r);background:rgba(255,42,109,.15)}
+  .panel{border:1px solid var(--line);background:var(--panel)}
+  .panel h3{margin:0;padding:7px 12px;font-size:12px;letter-spacing:2px;color:#000;background:var(--r)}
+  .panel .body{padding:4px 12px}
+  .finding{display:grid;grid-template-columns:auto 1fr auto;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-size:13px}
+  .finding:last-child{border:0}
+  .finding .sev{font-size:11px;padding:1px 6px;border:1px solid;align-self:start;letter-spacing:1px}
+  .sev.high{color:var(--r)} .sev.med{color:var(--o)} .sev.low{color:var(--c)} .sev.ok{color:var(--g)}
+  .finding .pts{color:var(--m);font-size:12px}
+  .finding small{display:block;color:var(--m)}
+  .tips{margin-top:16px;font-size:13px;color:var(--fg)}
+  .tips li{margin:3px 0}
+  footer{text-align:center;color:var(--m);font-size:12px;padding:20px}
+</style>
+</head>
+<body>
+<header>
+  <a class="brand" href="https://darkoes.github.io/">← darkOes.exe</a>
+  <a href="https://github.com/darkOes/phishing-url-scanner">source code ↗</a>
+</header>
+<main>
+  <h1>PHISHING_URL_SCANNER</h1>
+  <div class="sub">// IS THAT LINK A TRAP? SCAN IT BEFORE YOU CLICK.</div>
+  <div class="note">🔒 Static analysis only. The link is never opened or sent anywhere — all checks run in your browser.</div>
+
+  <form id="f">
+    <input id="url" placeholder="paste a suspicious link, e.g. http://paypa1-secure-login.xyz/verify" autocomplete="off" spellcheck="false" aria-label="URL">
+    <button type="submit">SCAN</button>
+  </form>
+  <div class="examples"><span>try:</span>
+    <button type="button" data-u="https://www.paypal.com/signin">paypal.com</button>
+    <button type="button" data-u="http://paypa1-secure.account-verify.xyz/login?session=8f3a">paypa1 lookalike</button>
+    <button type="button" data-u="https://www.xn--pple-43d.com/">homoglyph (аpple)</button>
+    <button type="button" data-u="http://185.62.190.4:8080/inpost/doplata.php">IP + port</button>
+    <button type="button" data-u="https://allegro.pl.oferta-platnosc.top/blik">allegro subdomain trick</button>
+    <button type="button" data-u="https://google.com@evil.example/x">@ trick</button>
+  </div>
+
+  <div id="result">
+    <div class="verdict">
+      <div class="gauge"><svg viewBox="0 0 36 36"><circle cx="18" cy="18" r="15.9" fill="none" stroke="#141d26" stroke-width="3"/><circle id="arc" cx="18" cy="18" r="15.9" fill="none" stroke-width="3" stroke-dasharray="0 100" stroke-linecap="round"/></svg><b id="score">0</b></div>
+      <div><h2 id="vTitle"></h2><p id="vText"></p></div>
+    </div>
+    <div class="anatomy"><span class="lbl">URL ANATOMY // registrable domain is underlined</span><div id="anat"></div></div>
+    <section class="panel"><h3>FINDINGS</h3><div class="body" id="findings"></div></section>
+    <ul class="tips">
+      <li>The only part that tells you who owns a site is the <b style="color:var(--y)">registrable domain</b> (underlined). Everything left of it can be anything.</li>
+      <li>Banks, couriers and shops never ask you to “verify” or “pay a small fee” through a link in an SMS.</li>
+      <li>When in doubt, type the address yourself instead of clicking.</li>
+    </ul>
+  </div>
+</main>
+<footer>built by <a href="https://github.com/darkOes">darkOes</a> // heuristics can be wrong — a low score is not a guarantee // never fade away 🌙</footer>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const BRANDS = {
+    paypal: 'paypal.com', apple: 'apple.com', microsoft: 'microsoft.com', google: 'google.com', facebook: 'facebook.com',
+    instagram: 'instagram.com', netflix: 'netflix.com', amazon: 'amazon.com', github: 'github.com', steam: 'steampowered.com',
+    allegro: 'allegro.pl', olx: 'olx.pl', inpost: 'inpost.pl', dhl: 'dhl.com', mbank: 'mbank.pl', pkobp: 'pkobp.pl',
+    ing: 'ing.pl', santander: 'santander.pl', revolut: 'revolut.com', binance: 'binance.com', coinbase: 'coinbase.com',
+    linkedin: 'linkedin.com', outlook: 'outlook.com', office: 'office.com', dropbox: 'dropbox.com', discord: 'discord.com',
+  };
+  const BAD_TLDS = ['zip', 'mov', 'xyz', 'top', 'tk', 'ml', 'ga', 'cf', 'gq', 'click', 'country', 'work', 'support', 'rest', 'cam', 'icu', 'buzz', 'monster', 'sbs', 'cfd'];
+  const SHORTENERS = ['bit.ly', 'tinyurl.com', 't.co', 'goo.gl', 'is.gd', 'ow.ly', 'cutt.ly', 'rebrand.ly', 'shorturl.at', 'tiny.cc'];
+  const KEYWORDS = ['login', 'log-in', 'signin', 'sign-in', 'verify', 'verification', 'secure', 'account', 'update', 'confirm', 'password',
+    'wallet', 'banking', 'unlock', 'suspend', 'billing', 'invoice', 'payment', 'doplata', 'dopłata', 'paczka', 'platnosc', 'blik', 'odbierz'];
+  const ALLOW = ['githubusercontent.com', 'googleusercontent.com', 'googleapis.com', 'microsoftonline.com', 'office365.com', 'paypalobjects.com', 'steamcommunity.com', 'fbcdn.net'];
+  const MULTI_TLD =['co.uk', 'org.uk', 'com.pl', 'net.pl', 'org.pl', 'com.au', 'co.jp', 'com.br', 'co.in'];
+  const CONFUSABLE = {'0': 'o', '1': 'l', '3': 'e', '5': 's', '4': 'a', '7': 't', '8': 'b', '9': 'g', 'rn': 'm', 'vv': 'w', 'cl': 'd'};
+
+  // RFC 3492 punycode decoder, so xn--pple-43d can be shown as "аpple" (Cyrillic а)
+  function punyDecode(input) {
+    const base = 36, tMin = 1, tMax = 26, skew = 38, damp = 700;
+    let out = [], i = 0, n = 128, bias = 72;
+    let b = input.lastIndexOf('-'); if (b < 0) b = 0;
+    for (let j = 0; j < b; j++) out.push(input.charCodeAt(j));
+    const adapt = (delta, num, first) => { delta = first ? Math.floor(delta / damp) : delta >> 1; delta += Math.floor(delta / num); let k = 0; while (delta > 455) { delta = Math.floor(delta / 35); k += base; } return k + Math.floor(36 * delta / (delta + skew)); };
+    for (let idx = b > 0 ? b + 1 : 0; idx < input.length;) {
+      const oldi = i;
+      for (let w = 1, k = base; ; k += base) {
+        const c = input.charCodeAt(idx++);
+        const digit = c - 48 < 10 ? c - 22 : c - 65 < 26 ? c - 65 : c - 97 < 26 ? c - 97 : base;
+        i += digit * w;
+        const t = k <= bias ? tMin : k >= bias + tMax ? tMax : k - bias;
+        if (digit < t) break;
+        w *= base - t;
+      }
+      bias = adapt(i - oldi, out.length + 1, oldi === 0);
+      n += Math.floor(i / (out.length + 1)); i %= out.length + 1;
+      out.splice(i++, 0, n);
+    }
+    return String.fromCodePoint(...out);
+  }
+  const HOMO = {'а': 'a', 'е': 'e', 'о': 'o', 'р': 'p', 'с': 'c', 'у': 'y', 'х': 'x', 'і': 'i', 'ј': 'j', 'ѕ': 's', 'ԁ': 'd', 'ɡ': 'g', 'ӏ': 'l', 'һ': 'h', 'ո': 'n', 'ս': 'u', 'ν': 'v', 'ο': 'o', 'α': 'a', 'ε': 'e'};
+  const unicodeHost = h => h.split('.').map(p => { try { return p.startsWith('xn--') ? punyDecode(p.slice(4)) : p; } catch (e) { return p; } }).join('.');
+  const skeleton = s => [...s].map(ch => HOMO[ch] || ch).join('');
+
+  function registrable(host) {
+    const parts = host.split('.');
+    const last2 = parts.slice(-2).join('.');
+    if (MULTI_TLD.includes(last2) && parts.length >= 3) return parts.slice(-3).join('.');
+    return last2;
+  }
+  function normalize(s) {
+    let out = s.toLowerCase();
+    for (const [k, v] of Object.entries(CONFUSABLE)) out = out.split(k).join(v);
+    return out;
+  }
+  function lev(a, b) {
+    const d = Array.from({length: a.length + 1}, (_, i) => [i]);
+    for (let j = 1; j <= b.length; j++) d[0][j] = j;
+    for (let i = 1; i <= a.length; i++) for (let j = 1; j <= b.length; j++)
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    return d[a.length][b.length];
+  }
+  const esc = s => s.replace(/[&<>"]/g, c => ({'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c]));
+
+  function scan(raw) {
+    const F = [];
+    const add = (sev, pts, title, why) => F.push({sev, pts, title, why});
+    let input = raw.trim();
+    if (/^(javascript|data|vbscript):/i.test(input)) {
+      add('high', 60, `"${input.split(':')[0]}:" scheme`, 'This is not a website — it runs code or embeds content directly. Never click these.');
+      return {F, score: 100, url: null};
+    }
+    if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(input)) input = 'http://' + input;
+    let u;
+    try { u = new URL(input); } catch (e) { return {error: 'That does not look like a valid URL.'}; }
+    const rawHost = (input.match(/^[a-z]+:\/\/([^/?#]*)/i) || [])[1] || '';
+    const host = u.hostname.toLowerCase();
+    const reg = registrable(host);
+    const regName = reg.split('.')[0];
+    const tld = host.split('.').pop();
+
+    if (u.protocol === 'http:') add('med', 10, 'No HTTPS', 'Traffic is unencrypted. Every real login page uses HTTPS (but HTTPS alone proves nothing — phishers use it too).');
+    if (rawHost.includes('@')) add('high', 30, '"@" in the address', `Everything before "@" is ignored. This link really goes to ${host}.`);
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.startsWith('[')) add('high', 25, 'Raw IP address instead of a domain', 'Legit services use domain names. IP links are common in malware and phishing.');
+    if (host.includes('xn--')) {
+      const uni = unicodeHost(host), skel = skeleton(uni);
+      add('high', 30, `Punycode domain — really "${uni}"`, 'The domain contains non-Latin characters that can look identical to normal letters (е vs e, а vs a).');
+      const fake = Object.values(BRANDS).find(o => registrable(skel) === o);
+      if (fake) add('high', 40, `Homoglyph clone of ${fake}`, `With look-alike letters swapped back it reads "${skel}" — a pixel-perfect fake of ${fake}.`);
+    }
+    if (/[^\x00-\x7F]/.test(rawHost)) add('high', 30, 'Non-ASCII characters in the domain', 'Possible homoglyph attack — letters from other alphabets that look like Latin ones.');
+    if (u.port && !['80', '443'].includes(u.port)) add('med', 10, `Unusual port :${u.port}`, 'Normal websites do not need a port in the link.');
+    if (BAD_TLDS.includes(tld)) add('med', 15, `High-abuse TLD ".${tld}"`, 'This domain ending is cheap and heavily used for throwaway scam sites.');
+    if (SHORTENERS.includes(host)) add('med', 15, 'URL shortener', 'The real destination is hidden. Expand it with a preview service before trusting it.');
+    const subs = host.split('.').length - reg.split('.').length;
+    if (subs >= 3) add('low', 10, `${subs} levels of subdomains`, 'Long subdomain chains are used to push the real domain out of view on phones.');
+    if ((regName.replace(/^xn--/, '').match(/-/g) || []).length >= 2) add('low', 10, 'Many hyphens in the domain', 'Names like secure-login-account-verify are typical for phishing kits.');
+
+    // brand checks
+    let brandHit = false;
+    for (const [brand, official] of Object.entries(BRANDS)) {
+      if (reg === official || host.endsWith('.' + official)) { brandHit = 'official'; add('ok', 0, `Official ${brand} domain`, `The registrable domain is ${official}.`); break; }
+    }
+    if (brandHit !== 'official' && !ALLOW.includes(reg)) {
+      for (const [brand, official] of Object.entries(BRANDS)) {
+        const offName = official.split('.')[0];
+        const outside = normalize(host.slice(0, host.length - reg.length) + ' ' + u.pathname + ' ' + u.username);
+        const inOther = brand.length >= 4 && outside.includes(brand);
+        const n = normalize(regName);
+        const dist = lev(n, offName);
+        if (n === offName || (offName.length >= 5 && dist <= 1) || (offName.length >= 5 && regName.includes(offName) && regName !== offName)) {
+          add('high', 35, `Lookalike of ${official}`, `"${reg}" imitates ${official} (character swaps like 1→l, 0→o, rn→m, or extra words).`); brandHit = true; break;
+        }
+        if (inOther) { add('high', 30, `Brand "${brand}" used outside its real domain`, `It appears in the subdomain or path, but the site actually belongs to ${reg}.`); brandHit = true; break; }
+      }
+    }
+    const lowAll = (u.hostname + u.pathname + u.search).toLowerCase();
+    const kw = KEYWORDS.filter(k => lowAll.includes(k));
+    if (kw.length) add('low', Math.min(15, kw.length * 5), `Pressure keywords: ${kw.slice(0, 4).join(', ')}`, 'Words that push you to log in, pay, or “verify” fast.');
+    if (/\.(exe|scr|apk|msi|bat|js|vbs|iso|img)(\?|$)/i.test(u.pathname)) add('high', 25, 'Link downloads an executable file', 'Opening it could run code on your device.');
+    if (/\.(pdf|doc|jpg|png)\.(exe|scr|js)/i.test(u.pathname)) add('high', 20, 'Double file extension', 'A classic trick to make a program look like a document.');
+    if (input.length > 90) add('low', 5, 'Very long URL', 'Length is used to hide the real domain.');
+    if ((input.match(/%[0-9a-f]{2}/gi) || []).length > 5) add('low', 5, 'Heavy URL encoding', 'Encoded characters can hide what the link really says.');
+
+    if (!F.some(f => f.sev !== 'ok')) add('ok', 0, 'No red flags found', 'Nothing suspicious detected by these heuristics.');
+    const score = Math.min(100, F.reduce((s, f) => s + f.pts, 0));
+    return {F, score, url: u, host, reg, rawHost};
+  }
+
+  function render(res, raw) {
+    $('result').classList.add('on');
+    if (res.error) {
+      $('score').textContent = '?'; $('vTitle').textContent = 'INVALID INPUT'; $('vTitle').style.color = 'var(--m)';
+      $('vText').textContent = res.error; $('findings').innerHTML = ''; $('anat').textContent = raw; return;
+    }
+    const s = res.score;
+    const [title, color, text] = s >= 50 ? ['DANGEROUS', 'var(--r)', 'Multiple strong phishing indicators. Do not enter any data here.']
+      : s >= 20 ? ['SUSPICIOUS', 'var(--o)', 'Some red flags. Verify the sender and type the address manually.']
+      : ['LOOKS CLEAN', 'var(--g)', 'No strong indicators — still check who sent it and whether you expected it.'];
+    $('score').textContent = s; $('score').style.color = color;
+    $('arc').setAttribute('stroke', getComputedStyle(document.documentElement).getPropertyValue(color.slice(4, -1)).trim());
+    $('arc').setAttribute('stroke-dasharray', `${s} 100`);
+    $('vTitle').textContent = title; $('vTitle').style.color = color; $('vText').textContent = text;
+    if (res.url) {
+      const u = res.url;
+      const host = res.host;
+      const sub = host.slice(0, host.length - res.reg.length);
+      const cred = res.rawHost.includes('@') ? `<span class="p-bad">${esc(res.rawHost.split('@')[0])}@</span>` : '';
+      $('anat').innerHTML = `<span class="p-scheme">${u.protocol}//</span>${cred}<span class="p-sub">${esc(sub)}</span><span class="p-reg">${esc(res.reg)}</span>` +
+        `${u.port ? `<span class="p-bad">:${u.port}</span>` : ''}<span class="p-path">${esc(u.pathname + u.search + u.hash)}</span>`;
+    } else $('anat').textContent = raw;
+    const order = {high: 0, med: 1, low: 2, ok: 3};
+    $('findings').innerHTML = res.F.sort((a, b) => order[a.sev] - order[b.sev]).map(f =>
+      `<div class="finding"><span class="sev ${f.sev}">${f.sev.toUpperCase()}</span><div>${esc(f.title)}<small>${esc(f.why)}</small></div><span class="pts">${f.pts ? '+' + f.pts : ''}</span></div>`).join('');
+  }
+
+  $('f').onsubmit = e => { e.preventDefault(); const v = $('url').value; if (v.trim()) render(scan(v), v); };
+  document.querySelectorAll('.examples button').forEach(b => b.onclick = () => { $('url').value = b.dataset.u; render(scan(b.dataset.u), b.dataset.u); });
+})();
+</script>
+</body>
+</html>
